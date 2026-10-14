@@ -15,7 +15,10 @@ from nexo.core.models import ActionResult, DataClass, Intent
 from nexo.core.planner import Planner
 from nexo.events.log import EventLog
 from nexo.llm.gemini_provider import GeminiProvider
+from nexo.llm.privacy import sanitize_for_llm
 from nexo.policy.engine import PolicyEngine
+from nexo.project.architect import ProjectArchitect, ProjectPhaseResult, assemble_blueprint
+from nexo.project.store import ProjectSessionStore
 from nexo.tools.academic_tools import (
     AcademicAddTaskTool,
     AcademicGetDueTasksTool,
@@ -31,6 +34,8 @@ from nexo.tools.github_tools import (
     GitHubListPullRequestsTool,
 )
 from nexo.tools.mail_tools import MailGetPendingTool
+from nexo.tools.project_tools import ProjectScaffoldTool
+from nexo.tools.workspace_audit import WorkspaceAuditTool
 from nexo.tutor.english import EnglishCorrectTextTool, EnglishExplainGrammarTool
 from nexo.verifiers import (
     AcademicImportVerifier,
@@ -40,11 +45,12 @@ from nexo.verifiers import (
     GitStatusVerifier,
     JsonListVerifier,
     JsonObjectVerifier,
+    ProjectScaffoldVerifier,
     VerifierRegistry,
 )
 
 app = typer.Typer(no_args_is_help=True, help="Asistente local con políticas deterministas.")
-WORKSPACE = Path(__file__).resolve().parents[3]
+WORKSPACE = Path(os.environ.get("NEXO_WORKSPACE", Path.cwd())).resolve()
 DATABASE = WORKSPACE / "data" / "campusland.db"
 
 
@@ -57,6 +63,7 @@ def _runtime(use_llm: bool = False) -> tuple[Planner, Executor, EventLog]:
         FsReadTool(WORKSPACE),
         FsWriteTool(WORKSPACE),
         FsListTool(WORKSPACE),
+        WorkspaceAuditTool(WORKSPACE),
         GitStatusTool(WORKSPACE),
         GitDiffTool(WORKSPACE),
         GitCommitPrepTool(WORKSPACE),
@@ -71,6 +78,7 @@ def _runtime(use_llm: bool = False) -> tuple[Planner, Executor, EventLog]:
         AcademicImportTasksTool(DATABASE, WORKSPACE),
         EnglishExplainGrammarTool(),
         EnglishCorrectTextTool(),
+        ProjectScaffoldTool(WORKSPACE),
     ):
         registry.register(tool)
 
@@ -81,6 +89,7 @@ def _runtime(use_llm: bool = False) -> tuple[Planner, Executor, EventLog]:
         GitStatusVerifier(WORKSPACE),
         JsonListVerifier(),
         JsonObjectVerifier(),
+        ProjectScaffoldVerifier(WORKSPACE),
         AcademicTaskExistsVerifier(DATABASE),
         AcademicImportVerifier(DATABASE),
     ):
@@ -124,6 +133,63 @@ def _report(result: ActionResult) -> str:
     return result.output
 
 
+def _print_project_phase(session_id: str, result: ProjectPhaseResult) -> None:
+    typer.echo(f"Sesión: {session_id}")
+    typer.echo(f"FASE {result.phase}/4 · {result.title}")
+    typer.echo(f"Proyecto: {result.project_name} ({result.project_type})")
+    typer.echo(result.summary)
+
+    if result.phase == 1:
+        typer.echo("\nÁrbol de directorios")
+        typer.echo(result.directory_tree)
+        typer.echo("\nArquitectura")
+        for item in result.architecture:
+            typer.echo(f"- {item}")
+        typer.echo("\nRiesgos y mitigaciones")
+        for risk in result.risks:
+            typer.echo(f"- {risk}")
+    else:
+        if result.problem:
+            typer.echo(f"\nProblema: {result.problem}")
+        if result.directory_tree:
+            typer.echo("\nÁrbol de directorios")
+            typer.echo(result.directory_tree)
+        if result.architecture:
+            typer.echo("\nArquitectura")
+            for item in result.architecture:
+                typer.echo(f"- {item}")
+        if result.files:
+            typer.echo("\nArchivos de esta fase")
+            for generated_file in result.files:
+                typer.echo(f"\n### {generated_file.path}")
+                language = Path(generated_file.path).suffix.lstrip(".")
+                typer.echo(f"```{language}\n{generated_file.content}\n```")
+        if result.dependencies:
+            typer.echo("\nDependencias")
+            for dependency in result.dependencies:
+                typer.echo(f"- {dependency}")
+        if result.windows_installation:
+            typer.echo("\nInstalación Windows 11")
+            for command in result.windows_installation:
+                typer.echo(f"  {command}")
+        if result.quickstart:
+            typer.echo("\nUso rápido")
+            for command in result.quickstart:
+                typer.echo(f"  {command}")
+        if result.test_commands:
+            typer.echo("\nValidación sugerida")
+            for command in result.test_commands:
+                typer.echo(f"  {command}")
+        if result.git_commands:
+            typer.echo("\nComandos Git sugeridos; Nexo no los ejecuta")
+            for command in result.git_commands:
+                typer.echo(f"  {command}")
+        if result.risks:
+            typer.echo("\nRiesgos pendientes")
+            for risk in result.risks:
+                typer.echo(f"- {risk}")
+
+
 @app.command()
 def pending(
     upcoming: int = typer.Option(
@@ -148,9 +214,7 @@ def pending(
     if not tasks:
         typer.echo("  No hay tareas próximas.")
     for task in tasks:
-        typer.echo(
-            f"  {task['due_date']} | {task['subject']} | {task['title']} [{task['status']}]"
-        )
+        typer.echo(f"  {task['due_date']} | {task['subject']} | {task['title']} [{task['status']}]")
 
     if not approve_github:
         typer.echo("GitHub: omitido. Usa --approve-github para autorizar la consulta externa.")
@@ -199,6 +263,21 @@ def check_repo() -> None:
         )
     )
     typer.echo(output or "Working tree limpio")
+
+
+@app.command("workspace-audit")
+def workspace_audit(
+    path: str = typer.Argument(".", help="Carpeta relativa al workspace actual."),
+) -> None:
+    """Audita cachés, .gitignore y ajustes VS Code sin borrar ni editar nada."""
+    output = _report(
+        _run(
+            "workspace.audit",
+            {"path": path},
+            "auditar el workspace local sin modificarlo",
+        )
+    )
+    typer.echo(json.dumps(json.loads(output), indent=2, ensure_ascii=False))
 
 
 @app.command()
@@ -398,6 +477,189 @@ def github_draft_pr(
         )
     )
     typer.echo(output)
+
+
+@app.command("project")
+def generate_project(
+    requirement: str = typer.Argument(..., help="Requerimiento funcional del nuevo proyecto."),
+    project_type: str = typer.Option(
+        "auto",
+        "--type",
+        help="Tipo: auto, python-cli, static-web, express-api o express-mysql.",
+    ),
+    allow_cloud: bool = typer.Option(
+        False,
+        "--allow-cloud",
+        help="Autoriza enviar el requerimiento redactado a Gemini para la Fase 1.",
+    ),
+) -> None:
+    """Analiza el requerimiento y entrega exclusivamente la Fase 1."""
+    if not allow_cloud:
+        typer.echo(
+            "La Fase 1 requiere Gemini. Revisa el requerimiento y repite con --allow-cloud "
+            "si autorizas enviar su versión redactada.",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
+    try:
+        planner, executor, event_log = _runtime(use_llm=True)
+    except RuntimeError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from exc
+
+    try:
+        if planner.provider is None:
+            typer.echo("No hay proveedor LLM disponible para analizar el proyecto.", err=True)
+            raise typer.Exit(code=2)
+
+        safe_requirement = sanitize_for_llm(requirement, DataClass.CLOUD_OK)
+        architect = ProjectArchitect(planner.provider)
+        result = architect.generate_phase(safe_requirement, 1, project_type)
+        store = ProjectSessionStore(WORKSPACE / "data" / "project-sessions.db")
+        try:
+            session = store.create(safe_requirement, result.project_type)
+            session = store.save_phase(session.id, result)
+            _print_project_phase(session.id, result)
+            typer.echo(
+                f"\nNexo se detiene aquí. Revisa la Fase 1; para avanzar luego: "
+                f"nexo project-next {session.id} --approve-phase 1 --allow-cloud"
+            )
+        finally:
+            store.close()
+    finally:
+        event_log.close()
+
+
+@app.command("project-next")
+def project_next(
+    session_id: str = typer.Argument(..., help="Id devuelto por nexo project."),
+    approve_phase: int = typer.Option(..., "--approve-phase", min=1, max=3),
+    allow_cloud: bool = typer.Option(False, "--allow-cloud"),
+    feedback: str = typer.Option("", "--feedback", help="Comentarios para la siguiente fase."),
+) -> None:
+    """Avanza una sola fase y solo tras aprobar explícitamente la anterior."""
+    if not allow_cloud:
+        typer.echo("Cada fase que usa Gemini requiere --allow-cloud.", err=True)
+        raise typer.Exit(code=2)
+
+    data_dir = WORKSPACE / "data"
+    store = ProjectSessionStore(data_dir / "project-sessions.db")
+    try:
+        session = store.get(session_id)
+        expected_approval = session.next_phase - 1
+        if expected_approval < 1:
+            typer.echo("La Fase 1 todavía no está guardada.", err=True)
+            raise typer.Exit(code=2)
+        if session.next_phase > 4:
+            typer.echo("Las cuatro fases ya están completas; puedes revisar y aplicar el scaffold.")
+            return
+        if approve_phase != expected_approval:
+            typer.echo(
+                f"Debes aprobar la Fase {expected_approval}; no se permite saltar etapas.",
+                err=True,
+            )
+            raise typer.Exit(code=2)
+    finally:
+        store.close()
+
+    try:
+        planner, _executor, event_log = _runtime(use_llm=True)
+    except RuntimeError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from exc
+    try:
+        if planner.provider is None:
+            typer.echo("No hay proveedor LLM disponible para continuar.", err=True)
+            raise typer.Exit(code=2)
+
+        store = ProjectSessionStore(data_dir / "project-sessions.db")
+        try:
+            session = store.get(session_id)
+            result = ProjectArchitect(planner.provider).generate_phase(
+                session.requirement,
+                session.next_phase,
+                session.project_type,
+                previous_phases=list(session.phases),
+                feedback=feedback,
+            )
+            session = store.save_phase(session.id, result)
+            _print_project_phase(session.id, result)
+            if session.next_phase <= 4:
+                typer.echo(
+                    f"\nRevisa esta entrega. Para avanzar: nexo project-next {session.id} "
+                    f"--approve-phase {result.phase} --allow-cloud"
+                )
+            else:
+                typer.echo(
+                    f"\nFases completas. Revisa antes de aplicar: nexo project-apply "
+                    f"{session.id} --target proyectos/{result.project_name} --approve"
+                )
+        finally:
+            store.close()
+    finally:
+        event_log.close()
+
+
+@app.command("project-status")
+def project_status(session_id: str = typer.Argument(...)) -> None:
+    """Muestra el avance local de una sesión sin contactar a Gemini."""
+    store = ProjectSessionStore(WORKSPACE / "data" / "project-sessions.db")
+    try:
+        session = store.get(session_id)
+        typer.echo(f"Sesión: {session.id}")
+        typer.echo(f"Estado: {session.status}")
+        typer.echo(f"Tipo: {session.project_type}")
+        saved_phases = ", ".join(str(phase.phase) for phase in session.phases)
+        typer.echo(f"Fases guardadas: {saved_phases or 'ninguna'}")
+        next_phase = str(session.next_phase) if session.next_phase <= 4 else "aplicar scaffold"
+        typer.echo(f"Siguiente fase: {next_phase}")
+    except KeyError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from exc
+    finally:
+        store.close()
+
+
+@app.command("project-apply")
+def project_apply(
+    session_id: str = typer.Argument(...),
+    target: str = typer.Option(..., "--target", help="Destino nuevo relativo al workspace."),
+    approve: bool = typer.Option(False, "--approve", help="Aprueba escribir los archivos."),
+) -> None:
+    """Escribe el proyecto completo solo después de cuatro fases y aprobación explícita."""
+    store = ProjectSessionStore(WORKSPACE / "data" / "project-sessions.db")
+    try:
+        session = store.get(session_id)
+        if session.next_phase != 5:
+            typer.echo("Completa y revisa las cuatro fases antes de aplicar archivos.", err=True)
+            raise typer.Exit(code=2)
+        blueprint = assemble_blueprint(list(session.phases))
+    except (KeyError, ValueError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from exc
+    finally:
+        store.close()
+
+    typer.echo(f"Destino: {target}")
+    typer.echo(f"Archivos: {len(blueprint.files)}")
+    for generated_file in blueprint.files:
+        typer.echo(f"- {generated_file.path}")
+    if not approve:
+        typer.echo("No se escribió nada. Repite con --approve después de revisar el listado.")
+        return
+
+    output = _report(
+        _run(
+            "project.scaffold",
+            {"target": target, "blueprint": blueprint.model_dump(mode="json")},
+            "crear y verificar el scaffold aprobado",
+            verifier="project_scaffold",
+            approved=True,
+        )
+    )
+    typer.echo(output)
+    typer.echo("Los comandos Git de la Fase 4 son sugerencias; Nexo no los ejecutó.")
 
 
 @app.command("ui")

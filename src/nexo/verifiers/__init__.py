@@ -9,6 +9,7 @@ from nexo.verifiers.output_verifiers import (
     JsonListVerifier,
     JsonObjectVerifier,
 )
+from nexo.verifiers.project_verifier import ProjectScaffoldVerifier
 
 __all__ = [
     "FileContainsVerifier",
@@ -18,6 +19,7 @@ __all__ = [
     "AcademicImportVerifier",
     "JsonListVerifier",
     "JsonObjectVerifier",
+    "ProjectScaffoldVerifier",
     "Verification",
     "Verifier",
     "VerifierRegistry",

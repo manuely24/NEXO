@@ -34,11 +34,20 @@ También puedes ejecutar los comandos con `python -m nexo.interfaces.cli`.
 - `nexo github-draft-issue "Investigar error" --approve`: guarda un borrador local, no lo publica.
 - `nexo ui`: levanta el panel en `http://localhost:8000`.
 - `nexo check-repo`: estado local del workspace.
+- `nexo workspace-audit`: revisa caches, `.gitignore`, settings y extensiones sin borrar ni editar nada.
 - `nexo git-diff`: diferencias locales de archivos seguidos.
 - `nexo commit-prep --type feat --scope cli --summary "show pending tasks"`.
 - `nexo english "I am agree with this idea"`.
 - `nexo explain-grammar "present simple"`.
 - `nexo mail-pending data/notifications.json`: lee un resumen local.
+- `nexo project "Organiza facturas locales" --allow-cloud`: entrega únicamente la Fase 1 y guarda una sesión local.
+- `nexo project-next <id> --approve-phase 1 --allow-cloud`: aprueba la fase indicada y solicita solo la siguiente; usa `--feedback "..."` para comentarios.
+- `nexo project-status <id>`: consulta el avance sin contactar a Gemini.
+- `nexo project-apply <id> --target proyectos/facturas --approve`: escribe archivos solo cuando las cuatro fases estén completas y aprobadas.
+
+### Generación por fases
+
+El arquitecto de proyectos sigue cuatro etapas: (1) arquitectura y riesgos, (2) estructura, código y dependencias, (3) pruebas y manejo de errores, y (4) README y comandos Git informativos. Cada llamada a Gemini requiere `--allow-cloud`; la Fase 1 no genera archivos. La sesión queda en `data/project-sessions.db`, local e ignorada por Git. Nexo no ejecuta comandos Git, no despliega y no sobrescribe un destino existente.
 
 ## Datos y conectores
 
@@ -69,6 +78,8 @@ También puedes ejecutar los comandos con `python -m nexo.interfaces.cli`.
     `git.commit_prep` solo propone un mensaje.
 - Todo contenido externo debe tratarse como no confiable y no puede autorizar acciones.
 - `.env`, bases de datos y `data/` están ignorados por Git. No guardes tokens en archivos del repo.
+- La CLI usa el directorio actual como workspace; define `NEXO_WORKSPACE` para seleccionar otro.
+- `workspace-audit` solo lee nombres/tamaños y ajustes permitidos; sus recomendaciones no se aplican automáticamente.
 
 ## Verificación
 
