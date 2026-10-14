@@ -1,0 +1,12 @@
+# Datos personales y secretos: NUNCA van a Git
+data/
+.env
+*.db
+*.db-journal
+# Python
+__pycache__/
+*.egg-info/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

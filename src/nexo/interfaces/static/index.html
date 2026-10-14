@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>Nexo | Asistente personal</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Nexo inicio">
+        <span class="brand-mark" aria-hidden="true">N</span>
+        <span>NEXO<span class="brand-sub"> ASISTENTE PERSONAL</span></span>
+      </a>
+      <div class="topbar-right">
+        <time id="system-clock" class="system-clock"></time>
+        <div class="connection" id="connection-status">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span>Conectando</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="primary-column" aria-labelledby="page-title">
+        <div class="page-heading">
+          <p class="eyebrow"><span class="eyebrow-mark"></span> SISTEMA PERSONAL / EN LÍNEA</p>
+          <h1 id="page-title">A tu servicio.</h1>
+          <p class="lede">Puedo ayudarte con tus tareas, archivos y repositorios. Cada acción importante pasa por ti.</p>
+        </div>
+
+        <section class="assistant-console" aria-label="Conversación con Nexo">
+          <div class="console-heading">
+            <div class="assistant-id"><span class="assistant-mark" aria-hidden="true">N</span><div><strong>NEXO</strong><span>ASISTENTE DE SISTEMA</span></div></div>
+            <span class="ready-indicator"><span></span> PREPARADO</span>
+          </div>
+          <div id="conversation-log" class="conversation-log" aria-live="polite" aria-relevant="additions">
+            <article class="message assistant-message">
+              <span class="message-label">NEXO <time id="greeting-time"></time></span>
+              <p>Hola. Ya estoy conectado a tu espacio de trabajo. ¿Qué necesitas?</p>
+            </article>
+          </div>
+          <div class="quick-prompts" aria-label="Solicitudes rápidas">
+            <button type="button" data-prompt="Revisa el estado de Git y resume los cambios">Revisar Git</button>
+            <button type="button" data-prompt="¿Qué tareas académicas tengo pendientes esta semana?">Ver pendientes</button>
+            <button type="button" data-prompt="Explica gramática: present simple">Practicar inglés</button>
+          </div>
+          <form id="run-form" class="composer">
+            <label class="sr-only" for="message">Mensaje para Nexo</label>
+            <textarea id="message" name="message" rows="2" maxlength="4000" required
+              placeholder="Dime qué necesitas…"></textarea>
+            <div class="composer-footer">
+              <div class="composer-options">
+                <label class="privacy-control" for="data-class">
+                  <span>PRIVACIDAD</span>
+                  <select id="data-class" name="data_class">
+                    <option value="local">Solo local</option>
+                    <option value="confidential">Confidencial</option>
+                    <option value="cloud_ok">General</option>
+                  </select>
+                </label>
+                <label class="voice-output-control" for="voice-output">
+                  <input id="voice-output" type="checkbox">
+                  <span>Voz</span>
+                </label>
+              </div>
+              <div class="composer-actions">
+                <button id="voice-button" class="icon-button voice-button" type="button" title="Dictar mensaje" aria-label="Dictar mensaje">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"></rect><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3m-4 0h8"></path></svg>
+                </button>
+                <button class="button button-primary" type="submit"><span aria-hidden="true">↗</span> Enviar</button>
+              </div>
+            </div>
+            <p class="voice-disclosure">El dictado puede procesarse mediante servicios de voz de tu navegador. No dictes información privada.</p>
+          </form>
+        </section>
+
+        <section class="section-block" aria-labelledby="actions-title">
+          <div class="section-heading">
+            <div><p class="eyebrow">EJECUCIÓN</p><h2 id="actions-title">Actividad de esta sesión</h2></div>
+            <span id="action-count" class="count">0</span>
+          </div>
+          <div id="actions-list" class="action-list" aria-live="polite">
+            <p class="empty-state">Las acciones y sus verificaciones aparecerán aquí.</p>
+          </div>
+        </section>
+
+        <section class="section-block audit-block" aria-labelledby="audit-title">
+          <div class="section-heading">
+            <div><p class="eyebrow">TRAZABILIDAD</p><h2 id="audit-title">Registro de actividad</h2></div>
+            <span class="live-label"><span class="live-pulse"></span> EN VIVO</span>
+          </div>
+          <ol id="audit-list" class="audit-list" aria-live="polite">
+            <li class="empty-state">Esperando eventos del sistema.</li>
+          </ol>
+        </section>
+      </section>
+
+      <aside class="side-column" aria-label="Estado del sistema y tareas">
+        <section class="system-status" aria-label="Estado del sistema">
+          <p class="eyebrow">ESTADO DEL SISTEMA</p>
+          <div class="status-row"><span>Workspace</span><strong><i></i> LOCAL</strong></div>
+          <div class="status-row"><span>Canal de voz</span><strong id="voice-state">COMPROBANDO</strong></div>
+          <div class="status-row"><span>Acciones pendientes</span><strong id="pending-count">0</strong></div>
+        </section>
+        <section class="pending-panel">
+          <div class="section-heading pending-heading">
+            <div><p class="eyebrow">CAMPUSLAND / MOODLE</p><h2>Próximas entregas</h2></div>
+            <button id="refresh-pending" class="icon-button" type="button" title="Actualizar pendientes" aria-label="Actualizar pendientes">↻</button>
+          </div>
+          <label class="upcoming-control" for="upcoming-days">
+            <span>Próximos días</span>
+            <input id="upcoming-days" type="number" value="7" min="0" max="365">
+          </label>
+          <ul id="pending-list" class="pending-list" aria-live="polite">
+            <li class="empty-state">Cargando tareas…</li>
+          </ul>
+        </section>
+        <section class="policy-note" aria-label="Estado de seguridad">
+          <span class="policy-icon" aria-hidden="true">✓</span>
+          <div><h2>Control bajo tu mando</h2><p>Los cambios y acciones externas esperan tu aprobación. Nexo verifica cada resultado antes de marcarlo como listo.</p></div>
+        </section>
+      </aside>
+    </main>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
